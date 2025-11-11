@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, UserSquare2, Pill, Plus } from 'lucide-react';
+import { Building2, UserSquare2, Pill, Plus, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { supabase, Clinic, Provider } from '../lib/supabase';
+import { Clinic, Provider } from '../lib/supabase';
+import { clinicService } from '../services/clinicService';
+import { providerService } from '../services/providerService';
+import { drugService, DrugPricing } from '../services/drugService';
 
 interface PatientDetailsProps {
   onNext: () => void;
@@ -14,6 +17,7 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
   const [userClinics, setUserClinics] = useState<string[]>([]);
   const [userProviders, setUserProviders] = useState<string[]>([]);
   const [drugName, setDrugName] = useState('');
+  const [drugPricing, setDrugPricing] = useState<DrugPricing | null>(null);
   const [newClinicName, setNewClinicName] = useState('');
   const [newProviderName, setNewProviderName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -26,17 +30,17 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     if (!user) return;
 
     try {
-      const [clinicsRes, providersRes, userClinicsRes, userProvidersRes] = await Promise.all([
-        supabase.from('clinics').select('*').order('name'),
-        supabase.from('providers').select('*').order('name'),
-        supabase.from('user_clinics').select('clinic_id').eq('user_id', user.id),
-        supabase.from('user_providers').select('provider_id').eq('user_id', user.id),
+      const [clinicsData, providersData, userClinicsData, userProvidersData] = await Promise.all([
+        clinicService.getAllClinics(),
+        providerService.getAllProviders(),
+        clinicService.getUserClinics(user.id),
+        providerService.getUserProviders(user.id),
       ]);
 
-      if (clinicsRes.data) setClinics(clinicsRes.data);
-      if (providersRes.data) setProviders(providersRes.data);
-      if (userClinicsRes.data) setUserClinics(userClinicsRes.data.map(uc => uc.clinic_id));
-      if (userProvidersRes.data) setUserProviders(userProvidersRes.data.map(up => up.provider_id));
+      setClinics(clinicsData);
+      setProviders(providersData);
+      setUserClinics(userClinicsData);
+      setUserProviders(userProvidersData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -44,18 +48,53 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     }
   };
 
+  const refreshClinics = async () => {
+    if (!user) return;
+    try {
+      const [clinicsData, userClinicsData] = await Promise.all([
+        clinicService.getAllClinics(),
+        clinicService.getUserClinics(user.id),
+      ]);
+      setClinics(clinicsData);
+      setUserClinics(userClinicsData);
+    } catch (error) {
+      console.error('Error refreshing clinics:', error);
+    }
+  };
+
+  const refreshProviders = async () => {
+    if (!user) return;
+    try {
+      const [providersData, userProvidersData] = await Promise.all([
+        providerService.getAllProviders(),
+        providerService.getUserProviders(user.id),
+      ]);
+      setProviders(providersData);
+      setUserProviders(userProvidersData);
+    } catch (error) {
+      console.error('Error refreshing providers:', error);
+    }
+  };
+
   const handleAddClinic = async (clinicId: string) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('user_clinics')
-        .insert({ user_id: user.id, clinic_id: clinicId });
-
-      if (error) throw error;
-      setUserClinics([...userClinics, clinicId]);
+      await clinicService.addClinicToUser(user.id, clinicId);
+      await refreshClinics();
     } catch (error) {
       console.error('Error adding clinic:', error);
+    }
+  };
+
+  const handleRemoveClinic = async (clinicId: string) => {
+    if (!user) return;
+
+    try {
+      await clinicService.removeClinicFromUser(user.id, clinicId);
+      await refreshClinics();
+    } catch (error) {
+      console.error('Error removing clinic:', error);
     }
   };
 
@@ -63,14 +102,21 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('user_providers')
-        .insert({ user_id: user.id, provider_id: providerId });
-
-      if (error) throw error;
-      setUserProviders([...userProviders, providerId]);
+      await providerService.addProviderToUser(user.id, providerId);
+      await refreshProviders();
     } catch (error) {
       console.error('Error adding provider:', error);
+    }
+  };
+
+  const handleRemoveProvider = async (providerId: string) => {
+    if (!user) return;
+
+    try {
+      await providerService.removeProviderFromUser(user.id, providerId);
+      await refreshProviders();
+    } catch (error) {
+      console.error('Error removing provider:', error);
     }
   };
 
@@ -78,18 +124,10 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     if (!user || !newClinicName.trim()) return;
 
     try {
-      const { data: newClinic, error: insertError } = await supabase
-        .from('clinics')
-        .insert({ name: newClinicName.trim() })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      if (newClinic) {
-        setClinics([...clinics, newClinic]);
-        await handleAddClinic(newClinic.id);
-        setNewClinicName('');
-      }
+      const newClinic = await clinicService.createClinic(newClinicName.trim());
+      await clinicService.addClinicToUser(user.id, newClinic.id);
+      await refreshClinics();
+      setNewClinicName('');
     } catch (error) {
       console.error('Error creating clinic:', error);
     }
@@ -99,18 +137,10 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     if (!user || !newProviderName.trim()) return;
 
     try {
-      const { data: newProvider, error: insertError } = await supabase
-        .from('providers')
-        .insert({ name: newProviderName.trim() })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      if (newProvider) {
-        setProviders([...providers, newProvider]);
-        await handleAddProvider(newProvider.id);
-        setNewProviderName('');
-      }
+      const newProvider = await providerService.createProvider(newProviderName.trim());
+      await providerService.addProviderToUser(user.id, newProvider.id);
+      await refreshProviders();
+      setNewProviderName('');
     } catch (error) {
       console.error('Error creating provider:', error);
     }
@@ -121,12 +151,12 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     if (!user || !drugName.trim()) return;
 
     try {
-      const { error } = await supabase
-        .from('drug_details')
-        .insert({ user_id: user.id, drug_name: drugName.trim() });
+      const pricing = await drugService.saveDrugWithPricing(user.id, drugName.trim());
+      setDrugPricing(pricing);
 
-      if (error) throw error;
-      onNext();
+      setTimeout(() => {
+        onNext();
+      }, 2000);
     } catch (error) {
       console.error('Error saving drug details:', error);
     }
@@ -157,14 +187,28 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Your Clinics:</p>
                   <div className="flex flex-wrap gap-2">
-                    {userClinics.map(clinicId => {
-                      const clinic = clinics.find(c => c.id === clinicId);
-                      return clinic ? (
-                        <span key={clinic.id} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                          {clinic.name}
-                        </span>
-                      ) : null;
-                    })}
+                    {userClinics.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic">No clinics selected</p>
+                    ) : (
+                      userClinics.map(clinicId => {
+                        const clinic = clinics.find(c => c.id === clinicId);
+                        return clinic ? (
+                          <span
+                            key={clinic.id}
+                            className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                          >
+                            {clinic.name}
+                            <button
+                              onClick={() => handleRemoveClinic(clinic.id)}
+                              className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
+                              type="button"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ) : null;
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -217,14 +261,28 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                 <div>
                   <p className="text-sm font-medium text-gray-700 mb-2">Your Providers:</p>
                   <div className="flex flex-wrap gap-2">
-                    {userProviders.map(providerId => {
-                      const provider = providers.find(p => p.id === providerId);
-                      return provider ? (
-                        <span key={provider.id} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                          {provider.name}
-                        </span>
-                      ) : null;
-                    })}
+                    {userProviders.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic">No providers selected</p>
+                    ) : (
+                      userProviders.map(providerId => {
+                        const provider = providers.find(p => p.id === providerId);
+                        return provider ? (
+                          <span
+                            key={provider.id}
+                            className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
+                          >
+                            {provider.name}
+                            <button
+                              onClick={() => handleRemoveProvider(provider.id)}
+                              className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
+                              type="button"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ) : null;
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -273,18 +331,51 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                 <h2 className="text-xl font-semibold" style={{ color: '#531B93' }}>Drug Details</h2>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Drug Name
-                </label>
-                <input
-                  type="text"
-                  value={drugName}
-                  onChange={(e) => setDrugName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter drug name"
-                  required
-                />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Drug Name
+                  </label>
+                  <input
+                    type="text"
+                    value={drugName}
+                    onChange={(e) => setDrugName(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter drug name"
+                    required
+                  />
+                </div>
+
+                {drugPricing && (
+                  <div className="bg-gradient-to-r from-blue-50 to-slate-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-semibold mb-3" style={{ color: '#531B93' }}>
+                      Pricing for {drugPricing.drugName}
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                        <p className="text-xs text-gray-600 mb-1">Weekly</p>
+                        <p className="text-xl font-bold" style={{ color: '#009193' }}>
+                          ${drugPricing.weekly}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                        <p className="text-xs text-gray-600 mb-1">Monthly</p>
+                        <p className="text-xl font-bold" style={{ color: '#009193' }}>
+                          ${drugPricing.monthly}
+                        </p>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 text-center shadow-sm">
+                        <p className="text-xs text-gray-600 mb-1">Yearly</p>
+                        <p className="text-xl font-bold" style={{ color: '#009193' }}>
+                          ${drugPricing.yearly}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-3 text-center">
+                      Redirecting to Program Enrollment...
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
