@@ -4,11 +4,22 @@ export const providerService = {
   async getAllProviders(): Promise<Provider[]> {
     const { data, error } = await supabase
       .from('providers')
-      .select('*')
+      .select('id, name, specialty, contact_email, contact_phone, address, npi_number, created_at')
       .order('name');
 
     if (error) throw error;
     return data || [];
+  },
+
+  async getProviderById(providerId: string): Promise<Provider | null> {
+    const { data, error } = await supabase
+      .from('providers')
+      .select('id, name, specialty, contact_email, contact_phone, address, npi_number, created_at')
+      .eq('id', providerId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
   },
 
   async getUserProviders(userId: string): Promise<string[]> {

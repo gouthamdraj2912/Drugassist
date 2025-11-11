@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, UserSquare2, Pill, Plus, X } from 'lucide-react';
+import { Building2, UserSquare2, Pill, Plus, X, Mail, Phone, MapPin, Hash } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { Clinic, Provider } from '../lib/supabase';
 import { clinicService } from '../services/clinicService';
@@ -12,12 +12,20 @@ interface PatientDetailsProps {
 
 const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
   const { user } = useAuth();
+
   const [clinics, setClinics] = useState<Clinic[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [userClinics, setUserClinics] = useState<string[]>([]);
   const [userProviders, setUserProviders] = useState<string[]>([]);
+
+  const [selectedClinicId, setSelectedClinicId] = useState<string>('');
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('');
+  const [selectedProviderDetails, setSelectedProviderDetails] = useState<Provider | null>(null);
+  const [displayedProviders, setDisplayedProviders] = useState<Provider[]>([]);
+
   const [drugName, setDrugName] = useState('');
   const [drugPricing, setDrugPricing] = useState<DrugPricing | null>(null);
+
   const [newClinicName, setNewClinicName] = useState('');
   const [newProviderName, setNewProviderName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -25,6 +33,19 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
   useEffect(() => {
     loadData();
   }, [user]);
+
+  useEffect(() => {
+    if (drugName.trim()) {
+      const timer = setTimeout(() => {
+        const pricing = drugService.getDrugPricing(drugName.trim());
+        setDrugPricing(pricing);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    } else {
+      setDrugPricing(null);
+    }
+  }, [drugName]);
 
   const loadData = async () => {
     if (!user) return;
@@ -95,6 +116,13 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     try {
       await clinicService.removeClinicFromUser(user.id, clinicId);
       await refreshClinics();
+
+      if (selectedClinicId === clinicId) {
+        setSelectedClinicId('');
+        setSelectedProviderId('');
+        setSelectedProviderDetails(null);
+        setDisplayedProviders([]);
+      }
     } catch (error) {
       console.error('Error removing clinic:', error);
     }
@@ -150,6 +178,37 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     }
   };
 
+  const handleClinicSelect = async (clinicId: string) => {
+    setSelectedClinicId(clinicId);
+    setSelectedProviderId('');
+    setSelectedProviderDetails(null);
+    setDisplayedProviders([]);
+  };
+
+  const handleProviderSelect = async (providerId: string) => {
+    setSelectedProviderId(providerId);
+
+    const provider = providers.find(p => p.id === providerId);
+    if (provider) {
+      setSelectedProviderDetails(provider);
+    }
+  };
+
+  const handleAddProviderToDisplay = () => {
+    if (!selectedProviderDetails) return;
+
+    const alreadyDisplayed = displayedProviders.some(p => p.id === selectedProviderDetails.id);
+    if (!alreadyDisplayed) {
+      setDisplayedProviders([...displayedProviders, selectedProviderDetails]);
+    }
+
+    setSelectedProviderId('');
+  };
+
+  const handleRemoveProviderFromDisplay = (providerId: string) => {
+    setDisplayedProviders(displayedProviders.filter(p => p.id !== providerId));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !drugName.trim()) return;
@@ -176,7 +235,7 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100 p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h1 className="text-3xl font-bold mb-8" style={{ color: '#531B93' }}>Patient Details</h1>
 
@@ -216,20 +275,41 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Additional Clinic
-                  </label>
-                  <select
-                    onChange={(e) => e.target.value && handleAddClinic(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value=""
-                  >
-                    <option value="">Select a clinic...</option>
-                    {clinics.filter(c => !userClinics.includes(c.id)).map(clinic => (
-                      <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Clinic (Context)
+                    </label>
+                    <select
+                      value={selectedClinicId}
+                      onChange={(e) => handleClinicSelect(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select a clinic...</option>
+                      {userClinics.map(clinicId => {
+                        const clinic = clinics.find(c => c.id === clinicId);
+                        return clinic ? (
+                          <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
+                        ) : null;
+                      })}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Add Additional Clinic
+                    </label>
+                    <select
+                      onChange={(e) => e.target.value && handleAddClinic(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value=""
+                    >
+                      <option value="">Select a clinic...</option>
+                      {clinics.filter(c => !userClinics.includes(c.id)).map(clinic => (
+                        <option key={clinic.id} value={clinic.id}>{clinic.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
@@ -290,41 +370,189 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Add Provider
-                  </label>
-                  <select
-                    onChange={(e) => e.target.value && handleAddProvider(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value=""
-                  >
-                    <option value="">Select a provider...</option>
-                    {providers.filter(p => !userProviders.includes(p.id)).map(provider => (
-                      <option key={provider.id} value={provider.id}>{provider.name}</option>
-                    ))}
-                  </select>
-                </div>
+                {selectedClinicId && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-gray-700 mb-3">
+                      Select Provider for: <span className="font-bold" style={{ color: '#531B93' }}>
+                        {clinics.find(c => c.id === selectedClinicId)?.name}
+                      </span>
+                    </p>
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Or create new provider"
-                    value={newProviderName}
-                    onChange={(e) => setNewProviderName(e.target.value)}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCreateProvider}
-                    className="text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
-                    style={{ backgroundColor: '#531B93' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#421680'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#531B93'}
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add
-                  </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <select
+                          value={selectedProviderId}
+                          onChange={(e) => handleProviderSelect(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                        >
+                          <option value="">Select a provider...</option>
+                          {userProviders.map(providerId => {
+                            const provider = providers.find(p => p.id === providerId);
+                            return provider ? (
+                              <option key={provider.id} value={provider.id}>{provider.name}</option>
+                            ) : null;
+                          })}
+                        </select>
+                      </div>
+
+                      {selectedProviderDetails && (
+                        <button
+                          type="button"
+                          onClick={handleAddProviderToDisplay}
+                          className="text-white px-4 py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                          style={{ backgroundColor: '#009193' }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#007b7d'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#009193'}
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add to Display
+                        </button>
+                      )}
+                    </div>
+
+                    {selectedProviderDetails && (
+                      <div className="mt-4 bg-white rounded-lg p-4 border border-gray-200">
+                        <h3 className="font-semibold text-lg mb-3" style={{ color: '#531B93' }}>
+                          {selectedProviderDetails.name}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          {selectedProviderDetails.specialty && (
+                            <div className="flex items-center gap-2">
+                              <UserSquare2 className="w-4 h-4" style={{ color: '#009193' }} />
+                              <span className="text-gray-600">Specialty:</span>
+                              <span className="font-medium">{selectedProviderDetails.specialty}</span>
+                            </div>
+                          )}
+                          {selectedProviderDetails.contact_email && (
+                            <div className="flex items-center gap-2">
+                              <Mail className="w-4 h-4" style={{ color: '#009193' }} />
+                              <span className="text-gray-600">Email:</span>
+                              <span className="font-medium">{selectedProviderDetails.contact_email}</span>
+                            </div>
+                          )}
+                          {selectedProviderDetails.contact_phone && (
+                            <div className="flex items-center gap-2">
+                              <Phone className="w-4 h-4" style={{ color: '#009193' }} />
+                              <span className="text-gray-600">Phone:</span>
+                              <span className="font-medium">{selectedProviderDetails.contact_phone}</span>
+                            </div>
+                          )}
+                          {selectedProviderDetails.address && (
+                            <div className="flex items-center gap-2">
+                              <MapPin className="w-4 h-4" style={{ color: '#009193' }} />
+                              <span className="text-gray-600">Address:</span>
+                              <span className="font-medium">{selectedProviderDetails.address}</span>
+                            </div>
+                          )}
+                          {selectedProviderDetails.npi_number && (
+                            <div className="flex items-center gap-2">
+                              <Hash className="w-4 h-4" style={{ color: '#009193' }} />
+                              <span className="text-gray-600">NPI:</span>
+                              <span className="font-medium">{selectedProviderDetails.npi_number}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {displayedProviders.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-3">Added Provider Details (UI Only):</p>
+                    <div className="space-y-3">
+                      {displayedProviders.map(provider => (
+                        <div key={provider.id} className="bg-gradient-to-r from-slate-50 to-gray-50 rounded-lg p-4 border border-gray-200 relative">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveProviderFromDisplay(provider.id)}
+                            className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                          <h3 className="font-semibold text-lg mb-3 pr-8" style={{ color: '#531B93' }}>
+                            {provider.name}
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                            {provider.specialty && (
+                              <div className="flex items-center gap-2">
+                                <UserSquare2 className="w-4 h-4" style={{ color: '#009193' }} />
+                                <span className="text-gray-600">Specialty:</span>
+                                <span className="font-medium">{provider.specialty}</span>
+                              </div>
+                            )}
+                            {provider.contact_email && (
+                              <div className="flex items-center gap-2">
+                                <Mail className="w-4 h-4" style={{ color: '#009193' }} />
+                                <span className="text-gray-600">Email:</span>
+                                <span className="font-medium">{provider.contact_email}</span>
+                              </div>
+                            )}
+                            {provider.contact_phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="w-4 h-4" style={{ color: '#009193' }} />
+                                <span className="text-gray-600">Phone:</span>
+                                <span className="font-medium">{provider.contact_phone}</span>
+                              </div>
+                            )}
+                            {provider.address && (
+                              <div className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4" style={{ color: '#009193' }} />
+                                <span className="text-gray-600">Address:</span>
+                                <span className="font-medium">{provider.address}</span>
+                              </div>
+                            )}
+                            {provider.npi_number && (
+                              <div className="flex items-center gap-2">
+                                <Hash className="w-4 h-4" style={{ color: '#009193' }} />
+                                <span className="text-gray-600">NPI:</span>
+                                <span className="font-medium">{provider.npi_number}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Add Provider to Your List
+                    </label>
+                    <select
+                      onChange={(e) => e.target.value && handleAddProvider(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value=""
+                    >
+                      <option value="">Select a provider...</option>
+                      {providers.filter(p => !userProviders.includes(p.id)).map(provider => (
+                        <option key={provider.id} value={provider.id}>{provider.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Or create new provider"
+                      value={newProviderName}
+                      onChange={(e) => setNewProviderName(e.target.value)}
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateProvider}
+                      className="text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                      style={{ backgroundColor: '#531B93' }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#421680'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#531B93'}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -345,9 +573,10 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                     value={drugName}
                     onChange={(e) => setDrugName(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter drug name"
+                    placeholder="Enter drug name (pricing will auto-fetch)"
                     required
                   />
+                  <p className="text-xs text-gray-500 mt-1">Pricing information will automatically appear as you type</p>
                 </div>
 
                 {drugPricing && (
@@ -375,9 +604,6 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 mt-3 text-center">
-                      Redirecting to Program Enrollment...
-                    </p>
                   </div>
                 )}
               </div>

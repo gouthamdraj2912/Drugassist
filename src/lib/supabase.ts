@@ -21,6 +21,11 @@ export interface Clinic {
 export interface Provider {
   id: string;
   name: string;
+  specialty?: string | null;
+  contact_email?: string | null;
+  contact_phone?: string | null;
+  address?: string | null;
+  npi_number?: string | null;
   created_at: string;
 }
 
