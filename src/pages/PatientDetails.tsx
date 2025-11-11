@@ -87,7 +87,9 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     }
   };
 
-  const handleRemoveClinic = async (clinicId: string) => {
+  const handleRemoveClinic = async (e: React.MouseEvent, clinicId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!user) return;
 
     try {
@@ -109,7 +111,9 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     }
   };
 
-  const handleRemoveProvider = async (providerId: string) => {
+  const handleRemoveProvider = async (e: React.MouseEvent, providerId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!user) return;
 
     try {
@@ -199,7 +203,7 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                           >
                             {clinic.name}
                             <button
-                              onClick={() => handleRemoveClinic(clinic.id)}
+                              onClick={(e) => handleRemoveClinic(e, clinic.id)}
                               className="hover:bg-blue-200 rounded-full p-0.5 transition-colors"
                               type="button"
                             >
@@ -273,7 +277,7 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
                           >
                             {provider.name}
                             <button
-                              onClick={() => handleRemoveProvider(provider.id)}
+                              onClick={(e) => handleRemoveProvider(e, provider.id)}
                               className="hover:bg-green-200 rounded-full p-0.5 transition-colors"
                               type="button"
                             >
