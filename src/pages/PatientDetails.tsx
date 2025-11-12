@@ -97,59 +97,35 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
     }
   };
 
-  const handleAddClinic = async (clinicId: string) => {
-    if (!user) return;
-
-    try {
-      await clinicService.addClinicToUser(user.id, clinicId);
-      await refreshClinics();
-    } catch (error) {
-      console.error('Error adding clinic:', error);
-    }
+  const handleAddClinic = (clinicId: string) => {
+    if (userClinics.includes(clinicId)) return;
+    setUserClinics([...userClinics, clinicId]);
   };
 
-  const handleRemoveClinic = async (e: React.MouseEvent, clinicId: string) => {
+  const handleRemoveClinic = (e: React.MouseEvent, clinicId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!user) return;
 
-    try {
-      await clinicService.removeClinicFromUser(user.id, clinicId);
-      await refreshClinics();
+    setUserClinics(userClinics.filter(id => id !== clinicId));
 
-      if (selectedClinicId === clinicId) {
-        setSelectedClinicId('');
-        setSelectedProviderId('');
-        setSelectedProviderDetails(null);
-        setDisplayedProviders([]);
-      }
-    } catch (error) {
-      console.error('Error removing clinic:', error);
+    if (selectedClinicId === clinicId) {
+      setSelectedClinicId('');
+      setSelectedProviderId('');
+      setSelectedProviderDetails(null);
+      setDisplayedProviders([]);
     }
   };
 
-  const handleAddProvider = async (providerId: string) => {
-    if (!user) return;
-
-    try {
-      await providerService.addProviderToUser(user.id, providerId);
-      await refreshProviders();
-    } catch (error) {
-      console.error('Error adding provider:', error);
-    }
+  const handleAddProvider = (providerId: string) => {
+    if (userProviders.includes(providerId)) return;
+    setUserProviders([...userProviders, providerId]);
   };
 
-  const handleRemoveProvider = async (e: React.MouseEvent, providerId: string) => {
+  const handleRemoveProvider = (e: React.MouseEvent, providerId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!user) return;
 
-    try {
-      await providerService.removeProviderFromUser(user.id, providerId);
-      await refreshProviders();
-    } catch (error) {
-      console.error('Error removing provider:', error);
-    }
+    setUserProviders(userProviders.filter(id => id !== providerId));
   };
 
   const handleCreateClinic = async () => {
@@ -157,8 +133,9 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
 
     try {
       const newClinic = await clinicService.createClinic(newClinicName.trim());
-      await clinicService.addClinicToUser(user.id, newClinic.id);
-      await refreshClinics();
+
+      setClinics([...clinics, newClinic]);
+      setUserClinics([...userClinics, newClinic.id]);
       setNewClinicName('');
     } catch (error) {
       console.error('Error creating clinic:', error);
@@ -170,8 +147,9 @@ const PatientDetails: React.FC<PatientDetailsProps> = ({ onNext }) => {
 
     try {
       const newProvider = await providerService.createProvider(newProviderName.trim());
-      await providerService.addProviderToUser(user.id, newProvider.id);
-      await refreshProviders();
+
+      setProviders([...providers, newProvider]);
+      setUserProviders([...userProviders, newProvider.id]);
       setNewProviderName('');
     } catch (error) {
       console.error('Error creating provider:', error);
